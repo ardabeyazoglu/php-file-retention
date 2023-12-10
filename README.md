@@ -5,7 +5,7 @@ A typical example would be backup archiving based on custom policies such as "ke
 
 # Features
 
-- Apply hourly, daily, weekly, monthly and yearly policies
+- Apply hourly, daily, weekly, monthly and yearly policies (always UTC timezone)
 - Customize prune action to do something else instead of deleting (e.g. move them to cloud)
 - Customize file finder logic (e.g. support different storage interfaces such as S3)
 - Grouping files (e.g. to delete parent directory instead of a single file)
@@ -23,7 +23,7 @@ A typical example would be backup archiving based on custom policies such as "ke
 
 # Usage
 
-    // define retention policy
+    // define retention policy (UTC timezone)
     $retention = new PhpRetention\Retention([
         "keep-daily" => 7,
         "keep-weekly" => 4,
