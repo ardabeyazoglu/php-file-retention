@@ -1,11 +1,11 @@
 {
-    "name": "ardabeyazoglu/php-file-retention",
-    "description": "Backup retention policy computation",
+    "name": "ardabeyazoglu/php-retention",
+    "description": "File retention policy computation",
     "type": "library",
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Ardabeyazoglu\\PhpFileRetention\\": "src/"
+            "PhpRetention\\": "src/"
         }
     },
     "authors": [

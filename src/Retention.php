@@ -15,7 +15,7 @@ use RuntimeException;
  * Implemented similarly to https://restic.readthedocs.io/en/latest/060_forget.html
  * Class Retention.
  */
-class Kiva_Retention
+class Retention
 {
 
     /**
@@ -109,7 +109,7 @@ class Kiva_Retention
      * file2  2019-10-06 11:00:00
      * file1  2019-10-13 11:00:00.
      *
-     * @return Kiva_Retention
+     * @return self
      */
     public function setConfig(array $config)
     {
@@ -135,7 +135,7 @@ class Kiva_Retention
     /**
      * enable/disable dryrun.
      *
-     * @return Kiva_Retention
+     * @return self
      */
     public function setDryRun(bool $dryRun)
     {
