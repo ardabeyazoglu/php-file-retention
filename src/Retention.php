@@ -4,47 +4,43 @@ declare(strict_types=1);
 
 namespace PhpRetention;
 
-use Exception;
+use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
 
-/**
- * Implemented similarly to https://restic.readthedocs.io/en/latest/060_forget.html
- * Class Retention.
- */
-class Retention
+class Retention implements LoggerAwareInterface
 {
 
     /**
-     * @var int never delete the n last (most recent) snapshots
+     * @var int keep last n (most recent) files
      */
     private int $keepLast;
 
     /**
-     * @var int for the last n hours in which a snapshot was made, keep only the last snapshot for each hour
+     * @var int for the last n hours in which a file was made, keep only the last snapshot for each hour
      */
     private int $keepHourly;
 
     /**
-     * @var int for the last n days which have one or more snapshots, only keep the last one for that day
+     * @var int for the last n days which have one or more files, only keep the last one for that day
      */
     private int $keepDaily;
 
     /**
-     * @var int for the last n weeks which have one or more snapshots, only keep the last one for that week
+     * @var int for the last n weeks which have one or more files, only keep the last one for that week
      */
     private int $keepWeekly;
 
     /**
-     * @var int for the last n months which have one or more snapshots, only keep the last one for that month
+     * @var int for the last n months which have one or more files, only keep the last one for that month
      */
     private int $keepMonthly;
 
     /**
-     * @var int for the last n years which have one or more snapshots, only keep the last one for that year
+     * @var int for the last n years which have one or more files, only keep the last one for that year
      */
     private int $keepYearly;
 
@@ -54,21 +50,21 @@ class Retention
     private bool $dryRun;
 
     /**
-     * function to execute when pruning the file.
+     * function to execute when pruning the file
      *
      * @var callable
      */
     private $pruneHandler;
 
     /**
-     * function to get time of the file.
+     * function to get time of the file
      *
      * @var callable
      */
     private $timeHandler;
 
     /**
-     * function to find files.
+     * function to find files
      *
      * @var callable
      */
@@ -120,12 +116,18 @@ class Retention
         $this->keepMonthly = isset($config['keep-monthly']) ? intval($config['keep-monthly']) : 0;
         $this->keepYearly = isset($config['keep-yearly']) ? intval($config['keep-yearly']) : 0;
 
+        $this->keepLast = max($this->keepLast, 0);
+        $this->keepHourly = max($this->keepHourly, 0);
+        $this->keepDaily = max($this->keepDaily, 0);
+        $this->keepWeekly = max($this->keepWeekly, 0);
+        $this->keepMonthly = max($this->keepMonthly, 0);
+        $this->keepYearly = max($this->keepYearly, 0);
+
         if ($this->keepLast === 0) {
             // never delete all backups
             $this->keepLast = 1;
         }
 
-        // $this->removeEmptyDirs = isset($config['remove-empty-dirs']) && $config['remove-empty-dirs'];
         $this->excludePattern = isset($config['exclude-pattern']) ? (string) $config['exclude-pattern'] : null;
         $this->dryRun = isset($config['dry-run']) && $config['dry-run'];
 
@@ -133,9 +135,9 @@ class Retention
     }
 
     /**
-     * enable/disable dryrun.
-     *
-     * @return self
+     * enable/disable dry-run.
+     * @param bool $dryRun
+     * @return $this
      */
     public function setDryRun(bool $dryRun)
     {
@@ -144,6 +146,11 @@ class Retention
         return $this;
     }
 
+    /**
+     * exclude files using regex
+     * @param string $pattern
+     * @return void
+     */
     public function setExcludePattern(string $pattern)
     {
         $this->excludePattern = $pattern;
@@ -151,10 +158,8 @@ class Retention
 
     /**
      * apply retention policy under specified root directory.
-     *
-     * @return array list of kept files
-     *
-     * @throws Exception
+     * @param string $baseDir
+     * @return array
      */
     public function apply(string $baseDir)
     {
@@ -196,7 +201,7 @@ class Retention
     /**
      * check each file for retention
      * only the newest backups for each period will be kept (for daily, the latest backup of the day if there are multiple).
-     *
+     * @param FileInfo[] $files array of FileInfo objects
      * @return array[]
      */
     private function checkPolicy(array $files)
@@ -212,13 +217,13 @@ class Retention
         $yearlyList = [];
 
         // from newest to oldest
-        foreach ($files as $info) {
-            $filepath = $info['path'];
-            $hour = $info['hour'];
-            $day = $info['day'];
-            $week = $info['week'];
-            $month = $info['month'];
-            $year = $info['year'];
+        foreach ($files as $fileInfo) {
+            $filepath = $fileInfo->path;
+            $hour = $fileInfo->hour;
+            $day = $fileInfo->day;
+            $week = $fileInfo->week;
+            $month = $fileInfo->month;
+            $year = $fileInfo->year;
 
             $hourIndex = $year . $month . $day . $hour;
             $dayIndex = $year . $month . $day;
@@ -288,7 +293,8 @@ class Retention
                 }
             }
 
-            // skip this file for all periods
+            // mark this file processed for all "keep" periods configured
+
             if ($this->keepHourly) {
                 if (!isset($hourlyList[$hourIndex])) {
                     $hourlyList[$hourIndex] = $filepath;
@@ -321,12 +327,12 @@ class Retention
 
             if ($keep) {
                 $keepList[] = [
-                    'path' => $filepath,
+                    'fileInfo' => $fileInfo,
                     'reasons' => $reasons,
                 ];
             }
             else {
-                $pruneList[] = $filepath;
+                $pruneList[] = $fileInfo;
             }
         }
 
@@ -334,7 +340,7 @@ class Retention
             // always keep at least 1
             if (count($files) > 0) {
                 $keepList[] = [
-                    'path' => $files[0]['path'],
+                    'fileInfo' => $files[0],
                     'reasons' => ['last']
                 ];
             }
@@ -347,8 +353,8 @@ class Retention
     }
 
     /**
-     * find list of files to apply retention policy.
-     *
+     * find list of files to apply retention policy
+     * @param string $targetDir
      * @return array
      */
     public function findFiles(string $targetDir)
@@ -403,92 +409,92 @@ class Retention
                 }
 
                 if ($found) {
-                    $data = $this->checkFile($filepath, $isDirectory);
-                    if (is_null($data)) {
+                    $fileInfo = $this->checkFile($filepath, $isDirectory);
+                    if (is_null($fileInfo)) {
                         continue;
                     }
-                    $files[] = ['path' => $filepath] + $data;
+                    $files[] = $fileInfo;
                 }
             }
         }
 
         // sort files by descending order (from newest to oldest)
-        usort($files, function ($a, $b) {
-            return $b['time'] - $a['time'];
+        usort($files, function (FileInfo $a, FileInfo $b) {
+            return $b->timestampInUTC - $a->timestampInUTC;
         });
 
         return $files;
     }
 
     /**
-     * check file and get time info (UTC time!).
-     *
-     * @return array
+     * check file and get time info (UTC time!)
+     * @param string $filepath
+     * @param bool $isDirectory
+     * @return FileInfo|null
      */
-    protected function checkFile(string $filepath, bool $isDirectory = false)
+    protected function checkFile(string $filepath, bool $isDirectory = false): ?FileInfo
     {
         if (is_callable($this->timeHandler)) {
             $fn = $this->timeHandler;
-            $timeData = $fn($filepath, $isDirectory);
-            if (is_null($timeData)) {
-                return null;
-            }
-            $year = $timeData['year'] ?? 0;
-            $month = $timeData['month'] ?? 0;
-            $week = $timeData['week'] ?? 0;
-            $day = $timeData['day'] ?? 0;
-            $hour = $timeData['hour'] ?? 0;
-            $timeCreated = str_pad("{$year}", 4, '0', STR_PAD_LEFT) .
-                str_pad("{$month}", 2, '0', STR_PAD_LEFT) .
-                str_pad("{$day}", 2, '0', STR_PAD_LEFT) .
-                str_pad("{$hour}", 2, '0', STR_PAD_LEFT);
+            $fileInfo = $fn($filepath, $isDirectory);
+
+            return $fileInfo;
         }
         else {
             $stats = stat($filepath);
             $timeCreated = $stats['mtime'] ?: $stats['ctime'];
             [$year, $month, $week, $day, $hour] = explode('.', date('Y.m.W.d.H', $timeCreated));
-        }
 
-        return [
-            'time' => (int) $timeCreated,
-            'year' => (int) $year,
-            'month' => (int) $month,
-            'week' => (int) $week, // 1-53 (1 January 2021, Friday = 53)
-            'day' => (int) $day, // 1-31
-            'hour' => (int) $hour,
-            'isDir' => $isDirectory,
-        ];
+            return new FileInfo(
+                timestampInUTC: (int) $timeCreated,
+                year: (int) $year,
+                month: (int) $month,
+                week: (int) $week, // 1-53 (1 January 2021, Friday = 53)
+                day: (int) $day, // 1-31
+                hour: (int) $hour,
+                path: $filepath,
+                isDirectory: $isDirectory
+            );
+        }
     }
 
     /**
-     * prune action
-     * by default try to delete local file.
+     * run prune action (by default try to delete local file)
      *
+     * @param FileInfo $fileInfo
      * @return bool
      */
-    protected function pruneFile($filepath)
+    protected function pruneFile(FileInfo $fileInfo)
     {
         if (is_callable($this->pruneHandler)) {
             $fn = $this->pruneHandler;
-            $rs = $fn($filepath);
+            $rs = $fn($fileInfo);
         }
         else {
-            if (is_dir($filepath)) {
-                if (substr_count($filepath, '/') < 3) {
-                    // basic safeguard for deleting root folders
-                    throw new RuntimeException("{$filepath} is not allowed for pruning");
+            // TODO add better error handling
+            if ($fileInfo->isDirectory) {
+                if (substr_count(realpath($fileInfo->path), '/') < 3) {
+                    // basic safeguard against deleting root folders
+                    throw new RuntimeException("'{$fileInfo->path}' is not allowed for pruning");
                 }
-                $directory = new RecursiveDirectoryIterator($filepath);
+                $directory = new RecursiveDirectoryIterator($fileInfo->path);
                 $iterator = new RecursiveIteratorIterator($directory);
+                $dirsToDelete = [];
                 foreach ($iterator as $info) {
                     if (!$info->isDir()) {
                         unlink($info->getPathname());
                     }
+                    else {
+                        $dirsToDelete[] = $info->getPathName();
+                    }
                 }
-                $rs = rmdir($filepath);
+                foreach (array_reverse($dirsToDelete) as $dir) {
+                    rmdir($dir);
+                }
+                $rs = rmdir($fileInfo->path);
             }
             else {
-                $rs = unlink($filepath);
+                $rs = unlink($fileInfo->path);
             }
         }
 
@@ -496,7 +502,8 @@ class Retention
     }
 
     /**
-     * change default prune action.
+     * change default prune action
+     * @param callable $callback
      */
     public function setPruneHandler(callable $callback)
     {
@@ -504,7 +511,8 @@ class Retention
     }
 
     /**
-     * change default time calculation.
+     * change default time calculation
+     * @param callable $callback
      */
     public function setTimeHandler(callable $callback)
     {
@@ -512,7 +520,8 @@ class Retention
     }
 
     /**
-     * set finder.
+     * set finder
+     * @param callable $callback
      */
     public function setFindHandler(callable $callback)
     {
@@ -520,10 +529,20 @@ class Retention
     }
 
     /**
-     * set regex pattern for directory name to group files so that retention will be applied based on directory name.
+     * set regex pattern for directory name to group files so that retention will be applied based on directory name
+     * @param string $regexPattern
      */
     public function setGroupPattern(string $regexPattern)
     {
         $this->groupPattern = $regexPattern;
+    }
+
+    /**
+     * @param LoggerInterface $logger
+     * @return void
+     */
+    public function setLogger(LoggerInterface $logger): void
+    {
+        $this->logger = $logger;
     }
 }

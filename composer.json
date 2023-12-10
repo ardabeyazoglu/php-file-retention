@@ -8,6 +8,9 @@
             "PhpRetention\\": "src/"
         }
     },
+    "autoload-dev": {
+        "Tests\\": "tests/"
+    },
     "authors": [
         {
             "name": "Arda Beyazoglu",
