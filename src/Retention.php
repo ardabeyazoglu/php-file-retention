@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PhpRetention;
 
+use DateTime;
+use DateTimeZone;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -443,7 +445,12 @@ class Retention implements LoggerAwareInterface
         else {
             $stats = stat($filepath);
             $timeCreated = $stats['mtime'] ?: $stats['ctime'];
-            [$year, $month, $week, $day, $hour] = explode('.', date('Y.m.W.d.H', $timeCreated));
+
+            $date = new DateTime();
+            $date->setTimezone(new DateTimeZone("UTC"));
+            $date->setTimestamp($timeCreated);
+
+            [$year, $month, $week, $day, $hour] = explode('.', $date->format('Y.m.W.d.H'));
 
             return new FileInfo(
                 timestampInUTC: (int) $timeCreated,
