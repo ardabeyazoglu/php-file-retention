@@ -1,0 +1,24 @@
+{
+    "name": "ardabeyazoglu/php-file-retention",
+    "description": "Backup retention policy computation",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Ardabeyazoglu\\PhpFileRetention\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Arda Beyazoglu",
+            "email": "arda@beyazoglu.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "require": {
+        "monolog/monolog": "^3.5"
+    }
+}
