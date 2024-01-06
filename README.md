@@ -60,6 +60,6 @@ Feel free to post an issue, fork and send a pull request.
     
 # ToDo
 
-- [ ] Move custom file objects into their own interfaces
 - [ ] Write separate tests for each feature
+- [ ] Resolve all TODO comments
 - [ ] Add release system and integrate with packagist

@@ -15,7 +15,9 @@ declare(strict_types=1);
 namespace Tests;
 
 use DateTimeImmutable;
+use DateTimeZone;
 use Exception;
+use PhpRetention\FileInfo;
 use PhpRetention\Retention;
 
 /**
@@ -35,8 +37,9 @@ class RetentionTest extends TestCase
         $testData = [
             'test1/file1.txt',
             'test2/file2.txt',
+            'test2/file3.txt',
         ];
-        $fileData = [];
+        $filesExpected = [];
         foreach ($testData as $k => $d) {
             if ($k > 0) {
                 sleep(1);
@@ -45,54 +48,57 @@ class RetentionTest extends TestCase
             if (!file_exists($dir)) {
                 mkdir($dir, 0o770, true);
             }
-            $path = $dir . '/' . basename($d);
-            file_put_contents($path, time());
+            $filepath = $dir . '/' . basename($d);
+            file_put_contents($filepath, time());
 
-            $timeCreated = filemtime($path);
-            [$year, $month, $week, $day, $hour] = explode('.', date('Y.m.W.d.H', $timeCreated));
+            $stats = stat($filepath);
+            $timeCreated = $stats['mtime'] ?: $stats['ctime'];
 
-            $fileData[] = [
-                'path' => $path,
-                'time' => (int) $timeCreated,
-                'year' => (int) $year,
-                'month' => (int) $month,
-                'week' => (int) $week, // 1-53 (1 January 2021, Friday = 53)
-                'day' => (int) $day, // 1-31
-                'hour' => (int) $hour,
-                'isDir' => false,
-            ];
+            $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+            $date->setTimestamp($timeCreated);
+
+            $filesExpected[] = new FileInfo(
+                date: $date,
+                path: $filepath,
+                isDirectory: false
+            );
         }
 
-        // sort descending order
-        $fileData = array_reverse($fileData);
-        usort($fileData, function ($a, $b) {
-            return strcmp($a['path'], $b['path']);
+        // test arrays with same sort order
+        usort($filesExpected, function (FileInfo $a, FileInfo $b) {
+            return $a->timestamp > $b->timestamp;
         });
 
-        // test arrays with sort order
-        $result = $retention->findFiles($baseDir);
-        usort($result, function ($a, $b) {
-            return strcmp($a['path'], $b['path']);
+        $filesFound = $retention->findFiles($baseDir);
+        usort($filesFound, function (FileInfo $a, FileInfo $b) {
+            return $a->timestamp > $b->timestamp;
         });
 
-        foreach ($result as $k => $v) {
-            self::assertEquals($fileData[$k], $v, 'Found files did not match!');
+        foreach ($filesFound as $k => $fileFound) {
+            $fileExpected = $filesExpected[$k];
+            self::assertEquals($fileExpected, $fileFound, 'Found files did not match!');
         }
     }
 
     public function testCheckFile()
     {
         $ret = new Retention([]);
-        $ret->setTimeHandler(function ($filepath) {
+        $ret->setTimeHandler(function ($filepath, $isDirectory) {
             $name = basename($filepath);
-            if (preg_match('/db\-([0-9]+)/', $name, $matches)) {
-                $ymd = $matches[1];
+            if (preg_match('/db\-([0-9]{4})([0-9]{2})([0-9]{2})/', $name, $matches)) {
+                $year = (int) $matches[1];
+                $month = (int) $matches[2];
+                $day = (int) $matches[3];
 
-                return [
-                    'year' => (int) substr($ymd, 0, 4),
-                    'month' => (int) substr($ymd, 4, 2),
-                    'day' => (int) substr($ymd, 6, 2),
-                ];
+                $date = new DateTimeImmutable('now', new DateTimeZone("UTC"));
+                $date->setDate($year, $month, $day);
+                $date->setTime(0, 0, 0);
+
+                return new FileInfo(
+                    date: $date,
+                    path: $filepath,
+                    isDirectory: $isDirectory
+                );
             }
 
             return null;
@@ -100,10 +106,10 @@ class RetentionTest extends TestCase
 
         // test valid
         $result = $this->invokePrivateMethod($ret, 'checkFile', [
-            '/var/kiva/backup/db/kvacc12345/2021/db-20210412.sql.bz2',
+            '/backup/db/kvacc12345/2024/db-20240106.sql.bz2',
         ]);
         self::assertEquals([
-            'time' => 2021041200,
+            'time' => 2024010600,
             'year' => 2021,
             'month' => 4,
             'week' => 0,
@@ -114,7 +120,7 @@ class RetentionTest extends TestCase
 
         // test invalid
         $result = $this->invokePrivateMethod($ret, 'checkFile', [
-            '/var/kiva/backup/db/kvacc12345/2021/db.sql.bz2',
+            '/backup/db/kvacc12345/2021/db.sql.bz2',
         ]);
         self::assertNull($result);
     }

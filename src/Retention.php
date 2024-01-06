@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace PhpRetention;
 
-use DateTime;
+use DateTimeImmutable;
 use DateTimeZone;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
@@ -73,14 +73,14 @@ class Retention implements LoggerAwareInterface
     private $findHandler;
 
     /**
-     * @var string regex to exclude files (applies to full file path)
+     * @var string|null regex to exclude files (applies to full file path)
      */
-    private string $excludePattern;
+    private ?string $excludePattern;
 
     /**
-     * @var string set regex pattern for directory name to group files so that retention will be applied based on directory name
+     * @var string|null set regex pattern for directory name to group files so that retention will be applied based on directory name
      */
-    private string $groupPattern;
+    private ?string $groupPattern;
 
     private LoggerInterface $logger;
 
@@ -130,6 +130,7 @@ class Retention implements LoggerAwareInterface
             $this->keepLast = 1;
         }
 
+        $this->groupPattern = isset($config['group-pattern']) ? (string) $config['group-pattern'] : null;
         $this->excludePattern = isset($config['exclude-pattern']) ? (string) $config['exclude-pattern'] : null;
         $this->dryRun = isset($config['dry-run']) && $config['dry-run'];
 
@@ -422,7 +423,7 @@ class Retention implements LoggerAwareInterface
 
         // sort files by descending order (from newest to oldest)
         usort($files, function (FileInfo $a, FileInfo $b) {
-            return $b->timestampInUTC - $a->timestampInUTC;
+            return $b->timestamp - $a->timestamp;
         });
 
         return $files;
@@ -446,19 +447,11 @@ class Retention implements LoggerAwareInterface
             $stats = stat($filepath);
             $timeCreated = $stats['mtime'] ?: $stats['ctime'];
 
-            $date = new DateTime();
-            $date->setTimezone(new DateTimeZone("UTC"));
+            $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
             $date->setTimestamp($timeCreated);
 
-            [$year, $month, $week, $day, $hour] = explode('.', $date->format('Y.m.W.d.H'));
-
             return new FileInfo(
-                timestampInUTC: (int) $timeCreated,
-                year: (int) $year,
-                month: (int) $month,
-                week: (int) $week, // 1-53 (1 January 2021, Friday = 53)
-                day: (int) $day, // 1-31
-                hour: (int) $hour,
+                date: $date,
                 path: $filepath,
                 isDirectory: $isDirectory
             );

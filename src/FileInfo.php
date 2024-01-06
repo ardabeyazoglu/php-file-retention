@@ -2,25 +2,33 @@
 
 namespace PhpRetention;
 
+use DateTimeImmutable;
 use JsonSerializable;
 use ReflectionClass;
 
 readonly class FileInfo implements JsonSerializable
 {
 
+    public int $timestamp;
+    public int $year;
+    public int $month;
+    public int $week;
+    public int $day;
+    public int $hour;
+
     public function __construct(
-        public int $timestampInUTC,
-        public int $year,
-        public int $month,
-        /** @var int $week 1-53 (1 January 2021, Friday = 53) */
-        public int $week,
-        /** @var int $day day of month */
-        public int $day,
-        public int $hour,
+        public DateTimeImmutable $date,
         public string $path,
         public bool $isDirectory = false
     )
     {
+        [$year, $month, $week, $day, $hour] = explode('.', $date->format('Y.m.W.d.H'));
+        $this->year = (int) $year;
+        $this->month = (int) $month;
+        $this->week = (int) $week;
+        $this->day = (int) $day;
+        $this->hour = (int) $hour;
+        $this->timestamp = $date->getTimestamp();
     }
 
     public function __toString()
