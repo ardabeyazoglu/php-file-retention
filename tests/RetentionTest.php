@@ -66,12 +66,12 @@ class RetentionTest extends TestCase
 
         // test arrays with same sort order
         usort($filesExpected, function (FileInfo $a, FileInfo $b) {
-            return $a->timestamp > $b->timestamp;
+            return $a->timestamp > $b->timestamp ? 1 : -1;
         });
 
         $filesFound = $retention->findFiles($baseDir);
         usort($filesFound, function (FileInfo $a, FileInfo $b) {
-            return $a->timestamp > $b->timestamp;
+            return $a->timestamp > $b->timestamp ? 1 : -1;
         });
 
         foreach ($filesFound as $k => $fileFound) {
@@ -149,7 +149,7 @@ class RetentionTest extends TestCase
         }*/
 
         usort($timeData, function ($a, $b) {
-            return $b->timestamp - $a->timestamp;
+            return $b->timestamp - $a->timestamp ? 1 : 0;
         });
 
         return $timeData;
@@ -260,6 +260,10 @@ class RetentionTest extends TestCase
         /** @var Retention $retention */
         $retention->setConfig($policy);
         $actualKeepList = $retention->apply('');
+
+        /*usort($actualKeepList, function($a, $b){
+            return $a["fileInfo"]->timestamp > $b["fileInfo"]->timestamp ? 1 : -1;
+        });*/
 
         foreach ($expectedKeepList as $i => $expected) {
             $actualKeep = $actualKeepList[$i];

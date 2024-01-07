@@ -173,7 +173,7 @@ class Retention implements LoggerAwareInterface
 
         foreach ($keepList as $keep) {
             /** @var FileInfo $fileInfo */
-            $fileInfo = $keep['file'];
+            $fileInfo = $keep['fileInfo'];
             $this->logger->debug("{$fileInfo->path} will be kept for " . implode(', ', $keep['reasons']) . ' policies.');
         }
 
@@ -427,7 +427,7 @@ class Retention implements LoggerAwareInterface
 
         // sort files by descending order (from newest to oldest)
         usort($files, function (FileInfo $a, FileInfo $b) {
-            return $b->timestamp - $a->timestamp;
+            return $b->timestamp - $a->timestamp ? 1 : 0;
         });
 
         return $files;
