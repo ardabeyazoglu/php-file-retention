@@ -171,12 +171,15 @@ class Retention implements LoggerAwareInterface
         $keepList = $result['keep'];
         $pruneList = $result['prune'];
 
-        foreach ($keepList as $file) {
-            $this->logger->debug("{$file['path']} will be kept for " . implode(', ', $file['reasons']) . ' policies.');
+        foreach ($keepList as $keep) {
+            /** @var FileInfo $fileInfo */
+            $fileInfo = $keep['file'];
+            $this->logger->debug("{$fileInfo->path} will be kept for " . implode(', ', $keep['reasons']) . ' policies.');
         }
 
-        foreach ($pruneList as $filepath) {
-            $this->logger->debug("{$filepath} will be removed.");
+        foreach ($pruneList as $fileInfo) {
+            /** @var FileInfo $fileInfo */
+            $this->logger->debug("{$fileInfo->path} will be removed.");
         }
 
         if (empty($keepList)) {
@@ -191,9 +194,10 @@ class Retention implements LoggerAwareInterface
             $this->logger->debug('No policy applied because of dry-run.');
         }
         else {
-            foreach ($pruneList as $filepath) {
-                if (!$this->pruneFile($filepath)) {
-                    throw new RuntimeException("Pruning {$filepath} failed unexpectedly.");
+            foreach ($pruneList as $fileInfo) {
+                /** @var FileInfo $fileInfo */
+                if (!$this->pruneFile($fileInfo)) {
+                    throw new RuntimeException("Pruning {$fileInfo->path} failed unexpectedly.");
                 }
             }
         }
@@ -246,7 +250,7 @@ class Retention implements LoggerAwareInterface
                 }
             }
 
-            if ($this->keepHourly && !is_null($hour)) {
+            if ($this->keepHourly && $hour > 0) {
                 $keepCount = count($hourlyList);
                 if ($this->keepHourly > $keepCount) {
                     if (!isset($hourlyList[$hourIndex])) {
@@ -256,7 +260,7 @@ class Retention implements LoggerAwareInterface
                 }
             }
 
-            if ($this->keepDaily && !is_null($day)) {
+            if ($this->keepDaily && $day > 0) {
                 $keepCount = count($dailyList);
                 if ($this->keepDaily > $keepCount) {
                     if (!isset($dailyList[$dayIndex])) {
@@ -266,7 +270,7 @@ class Retention implements LoggerAwareInterface
                 }
             }
 
-            if ($this->keepWeekly && !is_null($week)) {
+            if ($this->keepWeekly && $week > 0) {
                 $keepCount = count($weeklyList);
                 if ($this->keepWeekly > $keepCount) {
                     if (!isset($weeklyList[$weekIndex])) {
@@ -276,7 +280,7 @@ class Retention implements LoggerAwareInterface
                 }
             }
 
-            if ($this->keepMonthly && !is_null($month)) {
+            if ($this->keepMonthly && $month > 0) {
                 $keepCount = count($monthlyList);
                 if ($this->keepMonthly > $keepCount) {
                     if (!isset($monthlyList[$monthIndex])) {
@@ -286,7 +290,7 @@ class Retention implements LoggerAwareInterface
                 }
             }
 
-            if ($this->keepYearly && !is_null($year)) {
+            if ($this->keepYearly && $year > 0) {
                 $keepCount = count($yearlyList);
                 if ($this->keepYearly > $keepCount) {
                     if (!isset($yearlyList[$yearIndex])) {
@@ -448,7 +452,7 @@ class Retention implements LoggerAwareInterface
             $timeCreated = $stats['mtime'] ?: $stats['ctime'];
 
             $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-            $date->setTimestamp($timeCreated);
+            $date = $date->setTimestamp($timeCreated);
 
             return new FileInfo(
                 date: $date,

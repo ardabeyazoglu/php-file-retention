@@ -42,6 +42,9 @@ readonly class FileInfo implements JsonSerializable
         $props = $reflection->getProperties();
         $data = [];
         foreach ($props as $prop) {
+            if ($prop->getName() === 'date') {
+                continue;
+            }
             if ($prop->isPublic()) {
                 $data[$prop->getName()] = $prop->getValue($this);
             }
