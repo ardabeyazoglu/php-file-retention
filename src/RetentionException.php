@@ -6,7 +6,7 @@ namespace PhpRetention;
 
 use Exception;
 
-class RetentionError extends Exception
+class RetentionException extends Exception
 {
 
 }

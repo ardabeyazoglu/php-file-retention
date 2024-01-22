@@ -508,7 +508,7 @@ class Retention implements LoggerAwareInterface
                 }
             }
             catch (Throwable $ex) {
-                throw new RetentionError("'{$pathToDelete}' could not be pruned: " . $ex->getMessage());
+                throw new RetentionException("'{$pathToDelete}' could not be pruned: " . $ex->getMessage());
             }
         }
 
