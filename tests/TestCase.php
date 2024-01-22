@@ -28,6 +28,8 @@ class TestCase extends PHPUnitTestCase
 
         $className = explode('\\', get_class($this));
         self::$tmpDir = sys_get_temp_dir() . '/' . array_pop($className) . '_' . bin2hex(random_bytes(8));
+
+        date_default_timezone_set("UTC");
     }
 
     public function tearDown(): void

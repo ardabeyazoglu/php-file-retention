@@ -12,6 +12,7 @@ use Psr\Log\NullLogger;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
+use Throwable;
 
 class Retention implements LoggerAwareInterface
 {
@@ -126,7 +127,7 @@ class Retention implements LoggerAwareInterface
         $this->keepYearly = max($this->keepYearly, 0);
 
         if ($this->keepLast === 0) {
-            // never delete all backups
+            // never delete all files
             $this->keepLast = 1;
         }
 
@@ -244,9 +245,9 @@ class Retention implements LoggerAwareInterface
             if ($this->keepLast) {
                 $keepCount = count($lastList);
                 if ($this->keepLast > $keepCount) {
+                    $keep = true;
                     $lastList[] = $filepath;
                     $reasons[] = 'last';
-                    $keep = true;
                 }
             }
 
@@ -427,7 +428,7 @@ class Retention implements LoggerAwareInterface
 
         // sort files by descending order (from newest to oldest)
         usort($files, function (FileInfo $a, FileInfo $b) {
-            return $b->timestamp - $a->timestamp ? 1 : 0;
+            return $b->timestamp - $a->timestamp ? -1 : 1;
         });
 
         return $files;
@@ -475,30 +476,39 @@ class Retention implements LoggerAwareInterface
             $rs = $fn($fileInfo);
         }
         else {
-            // TODO add better error handling
-            if ($fileInfo->isDirectory) {
-                if (substr_count(realpath($fileInfo->path), '/') < 3) {
-                    // basic safeguard against deleting root folders
-                    throw new RuntimeException("'{$fileInfo->path}' is not allowed for pruning");
-                }
-                $directory = new RecursiveDirectoryIterator($fileInfo->path);
-                $iterator = new RecursiveIteratorIterator($directory);
-                $dirsToDelete = [];
-                foreach ($iterator as $info) {
-                    if (!$info->isDir()) {
-                        unlink($info->getPathname());
+            try {
+                $pathToDelete = $fileInfo->path;
+                if ($fileInfo->isDirectory) {
+                    // basic safeguard against deleting unix root/system folders
+                    // most of the time backup dir will be at least /path/to/foo
+                    if (substr_count(realpath($pathToDelete), '/') < 3) {
+                        throw new RuntimeException("'{$pathToDelete}' is marked as risky, hence pruning is not allowed.");
                     }
-                    else {
-                        $dirsToDelete[] = $info->getPathName();
+                    $directory = new RecursiveDirectoryIterator($pathToDelete);
+                    $iterator = new RecursiveIteratorIterator($directory);
+                    $dirsToDelete = [];
+                    foreach ($iterator as $info) {
+                        $pathToDelete = $info->getPathName();
+                        if (!$info->isDir()) {
+                            unlink($pathToDelete);
+                        }
+                        else {
+                            $dirsToDelete[] = $info->getPathName();
+                        }
                     }
+                    foreach (array_reverse($dirsToDelete) as $pathToDelete) {
+                        rmdir($pathToDelete);
+                    }
+
+                    $pathToDelete = $fileInfo->path;
+                    $rs = rmdir($pathToDelete);
                 }
-                foreach (array_reverse($dirsToDelete) as $dir) {
-                    rmdir($dir);
+                else {
+                    $rs = unlink($pathToDelete);
                 }
-                $rs = rmdir($fileInfo->path);
             }
-            else {
-                $rs = unlink($fileInfo->path);
+            catch (Throwable $ex) {
+                throw new RetentionError("'{$pathToDelete}' could not be pruned: " . $ex->getMessage());
             }
         }
 

@@ -1,15 +1,5 @@
 <?php
 
-/*
- * Copyright (c) 2023 Kiva Teknoloji Ltd. All rights reserved.
- *
- * All information contained herein is, and remains the property of Kiva Teknoloji Ltd.
- * The intellectual and technical concepts contained herein are proprietary to Kiva Teknoloji Ltd.
- * and are protected by trade secret or copyright law. Dissemination of this information or
- * reproduction of this material is strictly forbidden unless prior written permission is obtained
- * from Kiva Teknoloji Ltd.
- */
-
 declare(strict_types=1);
 
 namespace Tests;
@@ -25,6 +15,12 @@ use PhpRetention\Retention;
  */
 class RetentionTest extends TestCase
 {
+    private function getStartDate(): DateTimeImmutable
+    {
+        // let's assume backup files are created at 01:00 and retention check starts right after
+        return new DateTimeImmutable('2024-01-22 01:00:00');
+    }
+
     public function testFindFiles()
     {
         $retention = new Retention([]);
@@ -66,12 +62,12 @@ class RetentionTest extends TestCase
 
         // test arrays with same sort order
         usort($filesExpected, function (FileInfo $a, FileInfo $b) {
-            return $a->timestamp > $b->timestamp ? 1 : -1;
+            return $a->timestamp > $b->timestamp ? -1 : 1;
         });
 
         $filesFound = $retention->findFiles($baseDir);
         usort($filesFound, function (FileInfo $a, FileInfo $b) {
-            return $a->timestamp > $b->timestamp ? 1 : -1;
+            return $a->timestamp > $b->timestamp ? -1 : 1;
         });
 
         foreach ($filesFound as $k => $fileFound) {
@@ -122,34 +118,29 @@ class RetentionTest extends TestCase
         self::assertNull($invalid);
     }
 
-    private function getStartDate(): DateTimeImmutable
-    {
-        return new DateTimeImmutable('2021-04-11 01:00');
-    }
-
     public function getFileData(): array
     {
         $startDate = $this->getStartDate();
         $timeData = [];
-        for ($i = 1; $i <= 181; ++$i) {
-            $dt2 = $startDate->modify("-{$i} day");
+        for ($i = 0; $i <= 366 * 2; ++$i) {
+            $dt2 = $startDate->modify("-{$i} day")->setTime(1, 1, 0);
 
             $timeData[] = new FileInfo(
                 date: $dt2,
                 path: "/backup/path/file-" . $dt2->format('Ymd_H')
             );
         }
-        /*for ($i = 0; $i < 5; ++$i) {
-            $dt2 = $startDate->modify("-{$i} year");
+        for ($i = 1; $i < 5; ++$i) {
+            $dt2 = $startDate->modify("-{$i} year")->setTime(1, 1, 0);
 
             $timeData[] = new FileInfo(
                 date: $dt2,
                 path: "/backup/path/file-" . $dt2->format('Ymd_H')
             );
-        }*/
+        }
 
         usort($timeData, function ($a, $b) {
-            return $b->timestamp - $a->timestamp ? 1 : 0;
+            return $a->timestamp > $b->timestamp ? -1 : 1;
         });
 
         return $timeData;
@@ -161,67 +152,70 @@ class RetentionTest extends TestCase
         return [
             [
                 [
-                    'keep-last' => 2,
-                    'keep-daily' => 3,
-                    'keep-weekly' => 3,
-                    'keep-monthly' => 4,
-                    'keep-yearly' => 2,
+                    'keep-last' => 3,
                 ],
                 [
                     [
-                        'path' => '/backup/path/file-20210410_01',
-                        'reasons' => ['last', 'daily', 'weekly', 'monthly', 'yearly'],
+                        'path' => '/backup/path/file-20240122_01',
+                        'reasons' => ['last'],
                     ],
                     [
-                        'path' => '/backup/path/file-20210409_01',
-                        'reasons' => ['last', 'daily'],
+                        'path' => '/backup/path/file-20240121_01',
+                        'reasons' => ['last'],
                     ],
                     [
-                        'path' => '/backup/path/file-20210408_01',
-                        'reasons' => ['daily'],
-                    ],
-                    [
-                        'path' => '/backup/path/file-20210404_01',
-                        'reasons' => ['weekly'],
-                    ],
-                    [
-                        'path' => '/backup/path/file-20210331_01',
-                        'reasons' => ['monthly'],
-                    ],
-                    [
-                        'path' => '/backup/path/file-20210328_01',
-                        'reasons' => ['weekly'],
-                    ],
-                    [
-                        'path' => '/backup/path/file-20210228_01',
-                        'reasons' => ['monthly'],
-                    ],
-                    [
-                        'path' => '/backup/path/file-20210131_01',
-                        'reasons' => ['monthly'],
-                    ],
-                    [
-                        'path' => '/backup/path/file-20201231_01',
-                        'reasons' => ['yearly'],
+                        'path' => '/backup/path/file-20240120_01',
+                        'reasons' => ['last'],
                     ],
                 ],
             ],
             [
                 [
-                    'keep-last' => 3,
+                    'keep-daily' => 3,
+                    'keep-weekly' => 5,
+                    'keep-monthly' => 4,
+                    'keep-yearly' => 4
                 ],
                 [
                     [
-                        'path' => '/backup/path/file-20210410_01',
-                        'reasons' => ['last'],
+                        'path' => '/backup/path/file-20240122_01',
+                        'reasons' => ['last', 'daily', 'weekly', 'monthly', 'yearly'],
                     ],
                     [
-                        'path' => '/backup/path/file-20210409_01',
-                        'reasons' => ['last'],
+                        'path' => '/backup/path/file-20240121_01',
+                        'reasons' => ['daily', 'weekly'],
                     ],
                     [
-                        'path' => '/backup/path/file-20210408_01',
-                        'reasons' => ['last'],
+                        'path' => '/backup/path/file-20240120_01',
+                        'reasons' => ['daily'],
+                    ],
+                    [
+                        'path' => '/backup/path/file-20240114_01',
+                        'reasons' => ['weekly'],
+                    ],
+                    [
+                        'path' => '/backup/path/file-20240107_01',
+                        'reasons' => ['weekly'],
+                    ],
+                    [
+                        'path' => '/backup/path/file-20231231_01',
+                        'reasons' => ['weekly', 'monthly', 'yearly'],
+                    ],
+                    [
+                        'path' => '/backup/path/file-20231130_01',
+                        'reasons' => ['monthly'],
+                    ],
+                    [
+                        'path' => '/backup/path/file-20231031_01',
+                        'reasons' => ['monthly'],
+                    ],
+                    [
+                        'path' => '/backup/path/file-20221231_01',
+                        'reasons' => ['yearly'],
+                    ],
+                    [
+                        'path' => '/backup/path/file-20210122_01',
+                        'reasons' => ['yearly'],
                     ],
                 ],
             ],
@@ -252,7 +246,7 @@ class RetentionTest extends TestCase
         $pruneCount = $fileCount - $keepCount;
 
         $retention
-            //->expects($this->exactly($pruneCount))
+            ->expects($this->exactly($pruneCount))
             ->method('pruneFile')
             ->willReturn(true)
         ;
@@ -261,9 +255,11 @@ class RetentionTest extends TestCase
         $retention->setConfig($policy);
         $actualKeepList = $retention->apply('');
 
-        /*usort($actualKeepList, function($a, $b){
-            return $a["fileInfo"]->timestamp > $b["fileInfo"]->timestamp ? 1 : -1;
-        });*/
+        self::assertSameSize($expectedKeepList, $actualKeepList);
+
+        usort($actualKeepList, function($a, $b){
+            return $a["fileInfo"]->timestamp > $b["fileInfo"]->timestamp ? -1 : 1;
+        });
 
         foreach ($expectedKeepList as $i => $expected) {
             $actualKeep = $actualKeepList[$i];

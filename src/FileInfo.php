@@ -6,15 +6,14 @@ use DateTimeImmutable;
 use JsonSerializable;
 use ReflectionClass;
 
-readonly class FileInfo implements JsonSerializable
+class FileInfo implements JsonSerializable
 {
-
-    public int $timestamp;
-    public int $year;
-    public int $month;
-    public int $week;
-    public int $day;
-    public int $hour;
+    public readonly int $timestamp;
+    public readonly int $year;
+    public readonly int $month;
+    public readonly int $week;
+    public readonly int $day;
+    public readonly int $hour;
 
     public function __construct(
         public DateTimeImmutable $date,

@@ -44,6 +44,18 @@ A typical example would be backup archiving based on custom policies such as "ke
     $result = $retention->apply("/path/to/files");
     print_r($result);
 
+# Policy Configuration
+
+This library is inspired by [Restic's policy model](https://restic.readthedocs.io/en/latest/060_forget.html#removing-snapshots-according-to-a-policy). 
+Policy configuration without understanding how it works might be misleading. Please read the [explanation](https://restic.readthedocs.io/en/latest/060_forget.html#removing-snapshots-according-to-a-policy) to understand how each `keep-***` parameter works. 
+
+    keep-last: keep the most recent N files. (default: 1)
+    keep-hourly: for the last N hours which have one or more files, keep only the most recent one for each hour.
+    keep-daily: for the last N days which have one or more files, keep only the most recent one for each day.
+    keep-weekly: for the last N weeks which have one or more files, keep only the most recent one for each week.
+    keep-monthly: for the last N months which have one or more files, keep only the most recent one for each month.
+    keep-yearly: for the last N years which have one or more files, keep only the most recent one for each year.
+
 # Examples
 
 ### 1. Custom Finder
@@ -56,10 +68,12 @@ A typical example would be backup archiving based on custom policies such as "ke
 
 # Contribution
 
-Feel free to post an issue, fork and send a pull request.
+Feel free to post an issue if you encounter a bug or you want to implement a new feature. 
+Please be descriptive in your posts.
     
 # ToDo
 
-- [ ] Write separate tests for each feature
-- [ ] Resolve all TODO comments
+- [ ] Document everyting
 - [ ] Add release system and integrate with packagist
+- [ ] Add keep-within-*** policy support
+- [ ] Add console support
