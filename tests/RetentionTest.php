@@ -21,7 +21,7 @@ class RetentionTest extends TestCase
         return new DateTimeImmutable('2024-01-22 01:00:00');
     }
 
-    public function testFindFiles()
+    public function testFinder()
     {
         $retention = new Retention([]);
 
@@ -76,7 +76,7 @@ class RetentionTest extends TestCase
         }
     }
 
-    public function testCheckFile()
+    public function testTimeHandling()
     {
         $ret = new Retention([]);
         $ret->setTimeHandler(function ($filepath, $isDirectory) {
@@ -102,7 +102,7 @@ class RetentionTest extends TestCase
 
         // test valid
         $testPath = '/backup/db/schema/2024/db-20240106.sql.bz2';
-        $expectedFileInfo = $this->invokePrivateMethod($ret, 'checkFile', [
+        $expectedFileInfo = $this->invokePrivateMethod($ret, 'checkTime', [
             $testPath
         ]);
 
@@ -112,41 +112,62 @@ class RetentionTest extends TestCase
         self::assertEquals($expectedFileInfo, $actualFileInfo);
 
         // test invalid
-        $invalid = $this->invokePrivateMethod($ret, 'checkFile', [
+        $invalid = $this->invokePrivateMethod($ret, 'checkTime', [
             '/backup/db/schema/2024/db.sql.bz2',
         ]);
         self::assertNull($invalid);
     }
 
-    public function getFileData(): array
+    /**
+     * @dataProvider prunePolicyProvider
+     *
+     * @throws Exception
+     */
+    public function testPruning(array $policy, array $expectedKeepList)
     {
-        $startDate = $this->getStartDate();
-        $timeData = [];
-        for ($i = 0; $i <= 366 * 2; ++$i) {
-            $dt2 = $startDate->modify("-{$i} day")->setTime(1, 1, 0);
+        $files = $this->getDummyFileData();
 
-            $timeData[] = new FileInfo(
-                date: $dt2,
-                path: "/backup/path/file-" . $dt2->format('Ymd_H')
-            );
-        }
-        for ($i = 1; $i < 5; ++$i) {
-            $dt2 = $startDate->modify("-{$i} year")->setTime(1, 1, 0);
+        $retention = $this->getMockBuilder(Retention::class)
+            ->onlyMethods(['findFiles', 'pruneFile'])
+            ->getMock()
+        ;
 
-            $timeData[] = new FileInfo(
-                date: $dt2,
-                path: "/backup/path/file-" . $dt2->format('Ymd_H')
-            );
-        }
+        $retention->expects($this->once())
+            ->method('findFiles')
+            ->willReturn($files)
+        ;
 
-        usort($timeData, function ($a, $b) {
-            return $a->timestamp > $b->timestamp ? -1 : 1;
+        $fileCount = count($files);
+        $keepCount = count($expectedKeepList);
+        $pruneCount = $fileCount - $keepCount;
+
+        $retention
+            ->expects($this->exactly($pruneCount))
+            ->method('pruneFile')
+            ->willReturn(true)
+        ;
+
+        /** @var Retention $retention */
+        $retention->setConfig($policy);
+        $actualKeepList = $retention->apply('');
+
+        self::assertSameSize($expectedKeepList, $actualKeepList);
+
+        usort($actualKeepList, function($a, $b){
+            return $a["fileInfo"]->timestamp > $b["fileInfo"]->timestamp ? -1 : 1;
         });
 
-        return $timeData;
+        foreach ($expectedKeepList as $i => $expected) {
+            $actualKeep = $actualKeepList[$i];
+            $actual = [
+                "path" => $actualKeep["fileInfo"]->path,
+                "reasons" => $actualKeep["reasons"]
+            ];
+            self::assertEquals($expected, $actual);
+        }
     }
 
-    public static function policyProvider(): array
+    public static function prunePolicyProvider(): array
     {
         // first one is policy config, second is list of dates/files to keep
         return [
@@ -222,52 +243,33 @@ class RetentionTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider policyProvider
-     *
-     * @throws Exception
-     */
-    public function testApplyRetention(array $policy, array $expectedKeepList)
+    private function getDummyFileData(): array
     {
-        $files = $this->getFileData();
+        $startDate = $this->getStartDate();
+        $timeData = [];
+        for ($i = 0; $i <= 366 * 2; ++$i) {
+            $dt2 = $startDate->modify("-{$i} day")->setTime(1, 1, 0);
 
-        $retention = $this->getMockBuilder(Retention::class)
-            ->onlyMethods(['findFiles', 'pruneFile'])
-            ->getMock()
-        ;
+            $timeData[] = new FileInfo(
+                date: $dt2,
+                path: "/backup/path/file-" . $dt2->format('Ymd_H')
+            );
+        }
+        for ($i = 1; $i < 5; ++$i) {
+            $dt2 = $startDate->modify("-{$i} year")->setTime(1, 1, 0);
 
-        $retention->expects($this->once())
-            ->method('findFiles')
-            ->willReturn($files)
-        ;
+            $timeData[] = new FileInfo(
+                date: $dt2,
+                path: "/backup/path/file-" . $dt2->format('Ymd_H')
+            );
+        }
 
-        $fileCount = count($files);
-        $keepCount = count($expectedKeepList);
-        $pruneCount = $fileCount - $keepCount;
-
-        $retention
-            ->expects($this->exactly($pruneCount))
-            ->method('pruneFile')
-            ->willReturn(true)
-        ;
-
-        /** @var Retention $retention */
-        $retention->setConfig($policy);
-        $actualKeepList = $retention->apply('');
-
-        self::assertSameSize($expectedKeepList, $actualKeepList);
-
-        usort($actualKeepList, function($a, $b){
-            return $a["fileInfo"]->timestamp > $b["fileInfo"]->timestamp ? -1 : 1;
+        usort($timeData, function ($a, $b) {
+            return $a->timestamp > $b->timestamp ? -1 : 1;
         });
 
-        foreach ($expectedKeepList as $i => $expected) {
-            $actualKeep = $actualKeepList[$i];
-            $actual = [
-                "path" => $actualKeep["fileInfo"]->path,
-                "reasons" => $actualKeep["reasons"]
-            ];
-            self::assertEquals($expected, $actual);
-        }
+        return $timeData;
     }
+
+
 }

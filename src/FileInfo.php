@@ -18,7 +18,7 @@ class FileInfo implements JsonSerializable
     public function __construct(
         public DateTimeImmutable $date,
         public string $path,
-        public bool $isDirectory = false
+        public ?bool $isDirectory = null
     )
     {
         [$year, $month, $week, $day, $hour] = explode('.', $date->format('Y.m.W.d.H'));
@@ -28,6 +28,10 @@ class FileInfo implements JsonSerializable
         $this->day = (int) $day;
         $this->hour = (int) $hour;
         $this->timestamp = $date->getTimestamp();
+
+        if (is_null($this->isDirectory) && file_exists($this->path)) {
+            $this->isDirectory = is_dir($this->path);
+        }
     }
 
     public function __toString()

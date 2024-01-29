@@ -11,7 +11,6 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use RuntimeException;
 use Throwable;
 
 class Retention implements LoggerAwareInterface
@@ -60,7 +59,7 @@ class Retention implements LoggerAwareInterface
     private $pruneHandler;
 
     /**
-     * function to get time of the file
+     * function to read or parse time of the file
      *
      * @var callable
      */
@@ -188,7 +187,7 @@ class Retention implements LoggerAwareInterface
                 'baseDir' => $baseDir,
             ]);
 
-            throw new RuntimeException('There must be at least one file to keep.');
+            throw new RetentionException('There must be at least one file to keep.');
         }
 
         if ($this->dryRun) {
@@ -198,7 +197,7 @@ class Retention implements LoggerAwareInterface
             foreach ($pruneList as $fileInfo) {
                 /** @var FileInfo $fileInfo */
                 if (!$this->pruneFile($fileInfo)) {
-                    throw new RuntimeException("Pruning {$fileInfo->path} failed unexpectedly.");
+                    throw new RetentionException("Pruning {$fileInfo->path} failed unexpectedly.");
                 }
             }
         }
@@ -371,6 +370,15 @@ class Retention implements LoggerAwareInterface
             $fn = $this->findHandler;
 
             $files = $fn($targetDir);
+            if (!is_array($files)) {
+                throw new RetentionException("Find handler must return an array of FileInfo objects.");
+            }
+
+            foreach ($files as $file) {
+                if (!($file instanceof FileInfo)) {
+                    throw new RetentionException("Find handler must return an array of FileInfo objects.");
+                }
+            }
         }
         else {
             $files = [];
@@ -417,7 +425,7 @@ class Retention implements LoggerAwareInterface
                 }
 
                 if ($found) {
-                    $fileInfo = $this->checkFile($filepath, $isDirectory);
+                    $fileInfo = $this->checkTime($filepath, $isDirectory);
                     if (is_null($fileInfo)) {
                         continue;
                     }
@@ -440,7 +448,7 @@ class Retention implements LoggerAwareInterface
      * @param bool $isDirectory
      * @return FileInfo|null
      */
-    protected function checkFile(string $filepath, bool $isDirectory = false): ?FileInfo
+    protected function checkTime(string $filepath, bool $isDirectory = false): ?FileInfo
     {
         if (is_callable($this->timeHandler)) {
             $fn = $this->timeHandler;
@@ -479,11 +487,23 @@ class Retention implements LoggerAwareInterface
             try {
                 $pathToDelete = $fileInfo->path;
                 if ($fileInfo->isDirectory) {
-                    // basic safeguard against deleting unix root/system folders
-                    // most of the time backup dir will be at least /path/to/foo
-                    if (substr_count(realpath($pathToDelete), '/') < 3) {
-                        throw new RuntimeException("'{$pathToDelete}' is marked as risky, hence pruning is not allowed.");
+                    $scheme = "file";
+                    if (preg_match('/^([0-9a-zA-Z_]+):\/\//i', strtolower($pathToDelete), $matches)) {
+                        $scheme = $matches[1];
                     }
+
+                    if ($scheme === 'file') {
+                        // basic safeguard against deleting unix root/system folders
+                        // most of the time backup dir will be at least /path/to/foo
+                        $realPathToDelete = realpath($pathToDelete);
+                        if (substr_count($realPathToDelete, '/') < 3) {
+                            // skip if scheme is different (e.g. s3://)
+                            if (str_starts_with($realPathToDelete, '/')) {
+                                throw new RetentionException("Pruning is not allowed in '{$pathToDelete}', because it is marked as risky. The directory depth must be bigger than 2.");
+                            }
+                        }
+                    }
+
                     $directory = new RecursiveDirectoryIterator($pathToDelete);
                     $iterator = new RecursiveIteratorIterator($directory);
                     $dirsToDelete = [];

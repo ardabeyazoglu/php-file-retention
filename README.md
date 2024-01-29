@@ -60,11 +60,72 @@ Policy configuration without understanding how it works might be misleading. Ple
 
 ### 1. Custom Finder
 
-### 2. Custom Time Comparisons
+    ```php
+    $rets->setFindHandler(function (string $targetDir) use ($ftpConnection) {
+        $files = [];
+        $fileList = ftp_mlsd($ftpConnection, $targetDir) ?: [];
+        foreach ($fileList as $file) {
+            $filename = $file['name'];
+            $time = (int) $file['modify'];
+    
+            if (preg_match('/^backup_\w+\.zip$/', $filename)) {
+                $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+                $date->setTimestamp($time);
+    
+                $filepath = "$targetDir/$filename";
+    
+                $files[] = new FileInfo(
+                    date: $date,
+                    path: $filepath,
+                    isDirectory: false
+                );
+            }
+        }
+    
+        return $files;
+    });
+    ```
+
+### 2. Custom Time Parser
+
+    ```php
+    $ret->setTimeHandler(function (string $filepath, bool $isDirectory) {
+        // assume the files waiting for retention have this format: "backup@YYYYmmdd"
+        if (preg_match('/^backup@([0-9]{4})([0-9]{2})([0-9]{2})$/', $filepath, $matches)) {
+            $year = intval($matches[0]);
+            $month = intval($matches[1]);
+            $day = intval($matches[2]);
+    
+            $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+            $date->setDate($year, $month, $day)->setTime(0, 0, 0, 0);
+    
+            return new FileInfo(
+                date: $date,
+                path: $filepath,
+                isDirectory: $isDirectory
+            );
+        }
+        else {
+            return null;
+        }
+    });
+    ```
 
 ### 3. Custom Prune Handler
 
+    ```php
+    $ret->setPruneHandler(function (FileInfo $fileInfo) use ($ftpConnection) {
+        ftp_delete($ftpConnection, $fileInfo->path);
+    });
+    ```
+
 ### 4. Grouping Files With Regexp
+
+    ```php
+    $ret->setGroupPattern(function () {
+        // TODO
+    });
+    ```
 
 # Contribution
 
@@ -73,7 +134,8 @@ Please be descriptive in your posts.
     
 # ToDo
 
-- [ ] Document everyting
-- [ ] Add release system and integrate with packagist
-- [ ] Add keep-within-*** policy support
+- [ ] Add group pattern support by custom function (or use "tagging" keyword)
+- [ ] Test grouping/tagging and custom pruning
 - [ ] Add console support
+- [ ] Add release system and integrate with packagist and codecov
+- [ ] Add keep-within-*** policy support
