@@ -73,14 +73,14 @@ class Retention implements LoggerAwareInterface
     private $findHandler;
 
     /**
+     * @var callable group files so that retention will be applied based on groups instead of single files
+     */
+    private $groupHandler;
+
+    /**
      * @var string|null regex to exclude files (applies to full file path)
      */
     private ?string $excludePattern;
-
-    /**
-     * @var string|null set regex pattern for directory name to group files so that retention will be applied based on directory name
-     */
-    private ?string $groupPattern;
 
     private LoggerInterface $logger;
 
@@ -130,7 +130,6 @@ class Retention implements LoggerAwareInterface
             $this->keepLast = 1;
         }
 
-        $this->groupPattern = isset($config['group-pattern']) ? (string) $config['group-pattern'] : null;
         $this->excludePattern = isset($config['exclude-pattern']) ? (string) $config['exclude-pattern'] : null;
         $this->dryRun = isset($config['dry-run']) && $config['dry-run'];
 
@@ -383,7 +382,6 @@ class Retention implements LoggerAwareInterface
         else {
             $files = [];
 
-            $groupPattern = $this->groupPattern;
             $excludePattern = $this->excludePattern;
 
             foreach (scandir($targetDir) as $file) {
@@ -404,13 +402,6 @@ class Retention implements LoggerAwareInterface
                 // trailing slash for cloud storage
                 if (str_ends_with($filepath, '/') || is_dir($filepath)) {
                     $isDirectory = true;
-
-                    // check basename for group pattern
-                    if (!empty($groupPattern)) {
-                        if (preg_match($groupPattern, basename($filepath))) {
-                            $found = true;
-                        }
-                    }
 
                     if (!$found) {
                         $filesRecursive = $this->findFiles($filepath);
@@ -563,12 +554,12 @@ class Retention implements LoggerAwareInterface
     }
 
     /**
-     * set regex pattern for directory name to group files so that retention will be applied based on directory name
-     * @param string $regexPattern
+     * set grouping function for directory name to group files so that retention will be applied based on groups
+     * @param callable $groupHandler
      */
-    public function setGroupPattern(string $regexPattern)
+    public function setGroupHandler(callable $groupHandler)
     {
-        $this->groupPattern = $regexPattern;
+        $this->groupHandler = $groupHandler;
     }
 
     /**

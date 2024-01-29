@@ -23,26 +23,28 @@ A typical example would be backup archiving based on custom policies such as "ke
 
 # Usage
 
-    // define retention policy (UTC timezone)
-    $retention = new PhpRetention\Retention([
-        "keep-daily" => 7,
-        "keep-weekly" => 4,
-        "keep-monthly" => 6,
-        "keep-yearly" => 2
-    ]);
+```php
+// define retention policy (UTC timezone)
+$retention = new PhpRetention\Retention([
+    "keep-daily" => 7,
+    "keep-weekly" => 4,
+    "keep-monthly" => 6,
+    "keep-yearly" => 2
+]);
 
-    // customize finder logic if required
-    $retention->setFindHandler(function () {});
+// customize finder logic if required
+$retention->setFindHandler(function () {});
 
-    // customize time calculation if required
-    $retention->setTimeHandler(function () {});
+// customize time calculation if required
+$retention->setTimeHandler(function () {});
 
-    // customize time calculation if required
-    $retention->setPruneHandler(function () {});
+// customize time calculation if required
+$retention->setPruneHandler(function () {});
 
-    // apply retention in given directory (this WILL PRUNE the files!)
-    $result = $retention->apply("/path/to/files");
-    print_r($result);
+// apply retention in given directory (this WILL PRUNE the files!)
+$result = $retention->apply("/path/to/files");
+print_r($result);
+```
 
 # Policy Configuration
 
@@ -60,72 +62,72 @@ Policy configuration without understanding how it works might be misleading. Ple
 
 ### 1. Custom Finder
 
-    ```php
-    $rets->setFindHandler(function (string $targetDir) use ($ftpConnection) {
-        $files = [];
-        $fileList = ftp_mlsd($ftpConnection, $targetDir) ?: [];
-        foreach ($fileList as $file) {
-            $filename = $file['name'];
-            $time = (int) $file['modify'];
-    
-            if (preg_match('/^backup_\w+\.zip$/', $filename)) {
-                $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-                $date->setTimestamp($time);
-    
-                $filepath = "$targetDir/$filename";
-    
-                $files[] = new FileInfo(
-                    date: $date,
-                    path: $filepath,
-                    isDirectory: false
-                );
-            }
+```php
+$rets->setFindHandler(function (string $targetDir) use ($ftpConnection) {
+    $files = [];
+    $fileList = ftp_mlsd($ftpConnection, $targetDir) ?: [];
+    foreach ($fileList as $file) {
+        $filename = $file['name'];
+        $time = (int) $file['modify'];
+
+        if (preg_match('/^backup_\w+\.zip$/', $filename)) {
+            $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+            $date->setTimestamp($time);
+
+            $filepath = "$targetDir/$filename";
+
+            $files[] = new FileInfo(
+                date: $date,
+                path: $filepath,
+                isDirectory: false
+            );
         }
-    
-        return $files;
-    });
-    ```
+    }
+
+    return $files;
+});
+```
 
 ### 2. Custom Time Parser
 
-    ```php
-    $ret->setTimeHandler(function (string $filepath, bool $isDirectory) {
-        // assume the files waiting for retention have this format: "backup@YYYYmmdd"
-        if (preg_match('/^backup@([0-9]{4})([0-9]{2})([0-9]{2})$/', $filepath, $matches)) {
-            $year = intval($matches[0]);
-            $month = intval($matches[1]);
-            $day = intval($matches[2]);
-    
-            $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-            $date->setDate($year, $month, $day)->setTime(0, 0, 0, 0);
-    
-            return new FileInfo(
-                date: $date,
-                path: $filepath,
-                isDirectory: $isDirectory
-            );
-        }
-        else {
-            return null;
-        }
-    });
-    ```
+```php
+$ret->setTimeHandler(function (string $filepath, bool $isDirectory) {
+    // assume the files waiting for retention have this format: "backup@YYYYmmdd"
+    if (preg_match('/^backup@([0-9]{4})([0-9]{2})([0-9]{2})$/', $filepath, $matches)) {
+        $year = intval($matches[0]);
+        $month = intval($matches[1]);
+        $day = intval($matches[2]);
+
+        $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $date->setDate($year, $month, $day)->setTime(0, 0, 0, 0);
+
+        return new FileInfo(
+            date: $date,
+            path: $filepath,
+            isDirectory: $isDirectory
+        );
+    }
+    else {
+        return null;
+    }
+});
+```
 
 ### 3. Custom Prune Handler
 
-    ```php
-    $ret->setPruneHandler(function (FileInfo $fileInfo) use ($ftpConnection) {
-        ftp_delete($ftpConnection, $fileInfo->path);
-    });
-    ```
+```php
+$ret->setPruneHandler(function (FileInfo $fileInfo) use ($ftpConnection) {
+    ftp_delete($ftpConnection, $fileInfo->path);
+});
+```
 
 ### 4. Grouping Files With Regexp
 
-    ```php
-    $ret->setGroupPattern(function () {
-        // TODO
-    });
-    ```
+```php
+$ret->setGroupHandler(function (string $filepath) {
+    // TODO
+});
+```
 
 # Contribution
 
