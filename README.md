@@ -80,7 +80,7 @@ $rets->setFindHandler(function (string $targetDir) use ($ftpConnection) {
 
         if (preg_match('/^backup_\w+\.zip$/', $filename)) {
             $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-            $date->setTimestamp($time);
+            $date = $date->setTimestamp($time);
 
             $filepath = "$targetDir/$filename";
 
@@ -113,7 +113,7 @@ $ret->setTimeHandler(function (string $filepath, bool $isDirectory) {
         $day = intval($matches[3]);
 
         $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-        $date->setDate($year, $month, $day)->setTime(0, 0, 0, 0);
+        $date = $date->setDate($year, $month, $day)->setTime(0, 0, 0, 0);
 
         return new FileInfo(
             date: $date,
@@ -171,4 +171,4 @@ Please be descriptive in your posts.
     
 # ToDo
 
-- [ ] Add keep-within-*** policy support
+- [ ] Add keep-within-*** policy support 
