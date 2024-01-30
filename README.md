@@ -168,7 +168,6 @@ Please be descriptive in your posts.
     
 # ToDo
 
-- [ ] Complete unit tests
 - [ ] Complete example tests
 - [ ] Release first version through packagist and codecov
 - [ ] Add keep-within-*** policy support
