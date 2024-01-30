@@ -1,8 +1,8 @@
-name: CI
-run-name: continuous integration actions
+name: tests
+run-name: run tests and create code coverage
 on: [push]
 jobs:
-  test:
+  test-php83:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
