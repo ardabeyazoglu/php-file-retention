@@ -5,13 +5,13 @@ A typical example would be backup archiving based on custom policies such as "ke
 
 # Features
 
-- Apply hourly, daily, weekly, monthly and yearly policies (always UTC timezone)
+- Apply hourly, daily, weekly, monthly and yearly policies
 - Customize prune action to do something else instead of deleting (e.g. move them to cloud)
 - Customize file finder logic (e.g. support different storage interfaces such as S3)
 - Grouping files (e.g. to delete parent directory instead of a single file)
 - Dry runnable
 - Logger aware
-- Very small, no dependencies
+- No dependencies
 
 # Install
 
@@ -62,7 +62,12 @@ Policy configuration without understanding how it works might be misleading. Ple
 
 ### 1. Custom Finder
 
+By default, it will scan target directory non-recursively and apply retention policy to each file or directory in the target directory.
+This will be okay for local files, mounted partitions and when using stream wrappers external storage protocols.
+In all other cases, a custom finder logic must be implemented to detect files to apply retention.
+
 ```php
+// get list of files from ftp
 $rets->setFindHandler(function (string $targetDir) use ($ftpConnection) {
     $files = [];
     $fileList = ftp_mlsd($ftpConnection, $targetDir) ?: [];
@@ -90,13 +95,19 @@ $rets->setFindHandler(function (string $targetDir) use ($ftpConnection) {
 
 ### 2. Custom Time Parser
 
+By default, it will check posix modification time of files to detect date and time information.
+It can be overriden by using a custom function, to resolve a different date value. 
+Can be handy for reading date information from a custom file name format. 
+
+NOTE: This will be only called when using default finder logic. If you are writing your own `findHandler`, that function is responsible for giving a valid list of files with a valid date info.
+
 ```php
+// assume the files waiting for retention have this format: "backup@YYYYmmdd.zip"
 $ret->setTimeHandler(function (string $filepath, bool $isDirectory) {
-    // assume the files waiting for retention have this format: "backup@YYYYmmdd"
-    if (preg_match('/^backup@([0-9]{4})([0-9]{2})([0-9]{2})$/', $filepath, $matches)) {
-        $year = intval($matches[0]);
-        $month = intval($matches[1]);
-        $day = intval($matches[2]);
+    if (preg_match('/^backup@([0-9]{4})([0-9]{2})([0-9]{2})\.zip$/', basename($filepath), $matches)) {
+        $year = intval($matches[1]);
+        $month = intval($matches[2]);
+        $day = intval($matches[3]);
 
         $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $date->setDate($year, $month, $day)->setTime(0, 0, 0, 0);
@@ -113,7 +124,10 @@ $ret->setTimeHandler(function (string $filepath, bool $isDirectory) {
 });
 ```
 
-### 3. Custom Prune Handler
+### 3. Custom Prune Action
+
+Pruning action is by default `unlink` for files and `rmdir` for empty directories. 
+It can be customized to call different delete functions or to do something else other than deleting.
 
 ```php
 $ret->setPruneHandler(function (FileInfo $fileInfo) use ($ftpConnection) {
@@ -121,11 +135,29 @@ $ret->setPruneHandler(function (FileInfo $fileInfo) use ($ftpConnection) {
 });
 ```
 
-### 4. Grouping Files With Regexp
+### 4. Grouping Files to Prune Together
+
+Let's assume the directory contains multiple backup files for the same date but for different purposes. 
+They can be grouped by using regexp to apply the same retention to altogether.
+
+    # example:
+    /backup/tenant/mysql-20240106.tar.gz
+    /backup/tenant/files-20240106.tar.gz
+    /backup/tenant/mysql-20240107.tar.gz
+    /backup/tenant/files-20240107.tar.gz
+
+Without the following function, a "keep-last=1" policy will prune only the first file. 
+By grouping them based on date, it will prune first two files together. 
 
 ```php
-$ret->setGroupHandler(function (string $filepath) {
-    // TODO
+// group different types of backups based on tenant and date and prune them together
+$ret->setGroupHandler(function (string $filepath) { 
+    if (preg_match('/\-([0-9]{8})\.tar\.gz$/', $filepath, $matches)) {
+        // group by date str
+        return $matches[1];
+    }
+
+    return null;
 });
 ```
 
@@ -136,8 +168,7 @@ Please be descriptive in your posts.
     
 # ToDo
 
-- [ ] Add group pattern support by custom function (or use "tagging" keyword)
-- [ ] Test grouping/tagging and custom pruning
-- [ ] Add console support
-- [ ] Add release system and integrate with packagist and codecov
+- [ ] Complete unit tests
+- [ ] Complete example tests
+- [ ] Release first version through packagist and codecov
 - [ ] Add keep-within-*** policy support

@@ -31,20 +31,16 @@ class RetentionTest extends TestCase
         }
 
         $testData = [
-            'test1/file1.txt',
-            'test2/file2.txt',
-            'test2/file3.txt',
+            'file1',
+            'file2',
+            'file3',
         ];
         $filesExpected = [];
         foreach ($testData as $k => $d) {
             if ($k > 0) {
                 sleep(1);
             }
-            $dir = $baseDir . '/' . dirname($d);
-            if (!file_exists($dir)) {
-                mkdir($dir, 0o770, true);
-            }
-            $filepath = $dir . '/' . basename($d);
+            $filepath = $baseDir . '/' . $d;
             file_put_contents($filepath, time());
 
             $stats = stat($filepath);
@@ -60,26 +56,23 @@ class RetentionTest extends TestCase
             );
         }
 
-        // test arrays with same sort order
-        usort($filesExpected, function (FileInfo $a, FileInfo $b) {
-            return $a->timestamp > $b->timestamp ? -1 : 1;
-        });
-
         $filesFound = $retention->findFiles($baseDir);
-        usort($filesFound, function (FileInfo $a, FileInfo $b) {
-            return $a->timestamp > $b->timestamp ? -1 : 1;
+
+        usort($filesExpected, function ($a, $b) {
+            return $a->timestamp > $b->timestamp ? 1 : -1;
+        });
+        usort($filesFound, function ($a, $b) {
+            return $a->timestamp > $b->timestamp ? 1 : -1;
         });
 
-        foreach ($filesFound as $k => $fileFound) {
-            $fileExpected = $filesExpected[$k];
-            self::assertEquals(json_encode($fileExpected), json_encode($fileFound), 'Found files did not match!');
-        }
+        // assertEqualsCanonicalizing cannot parse FileInfo objects
+        self::assertEquals($filesExpected, $filesFound);
     }
 
     public function testTimeHandling()
     {
         $ret = new Retention([]);
-        $ret->setTimeHandler(function ($filepath, $isDirectory) {
+        $ret->setTimeHandler(function (string $filepath, bool $isDirectory) {
             $name = basename($filepath);
             if (preg_match('/db\-([0-9]{4})([0-9]{2})([0-9]{2})/', $name, $matches)) {
                 $year = (int) $matches[1];
@@ -123,7 +116,7 @@ class RetentionTest extends TestCase
      *
      * @throws Exception
      */
-    public function testPruning(array $policy, array $expectedKeepList)
+    public function testPrunePolicy(array $policy, array $expectedKeepList)
     {
         $files = $this->getDummyFileData();
 
@@ -148,7 +141,7 @@ class RetentionTest extends TestCase
         ;
 
         /** @var Retention $retention */
-        $retention->setConfig($policy);
+        $retention->setPolicyConfig($policy);
         $actualKeepList = $retention->apply('');
 
         self::assertSameSize($expectedKeepList, $actualKeepList);
@@ -271,5 +264,120 @@ class RetentionTest extends TestCase
         return $timeData;
     }
 
+    public function testGrouping()
+    {
+        $testFiles = [
+            '/backup/tenant/mysql-20240106.tar.gz',
+            '/backup/tenant/files-20240106.tar.gz',
+            '/backup/tenant/mysql-20240107.tar.gz',
+            '/backup/tenant/files-20240107.tar.gz'
+        ];
+        $expectedKeptFiles = [
+            '/backup/tenant/mysql-20240107.tar.gz',
+            '/backup/tenant/files-20240107.tar.gz'
+        ];
+
+        $retention = new Retention();
+        $retention->setPolicyConfig(['keep-last' => 1]);
+        $retention->setPruneHandler(function (FileInfo $fileInfo) {
+            // simulate pruning
+            return true;
+        });
+        $retention->setFindHandler(function (string $targetDir) use ($testFiles) {
+            $files = [];
+            foreach ($testFiles as $filepath) {
+                if (preg_match('/\-([0-9]{4})([0-9]{2})([0-9]{2})/', $filepath, $matches)) {
+                    $year = intval($matches[1]);
+                    $month = intval($matches[2]);
+                    $day = intval($matches[3]);
+
+                    $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+                    $date = $date->setDate($year, $month, $day)->setTime(0, 0, 0, 0);
+
+                    $files[] = new FileInfo(
+                        date: $date,
+                        path: $filepath,
+                        isDirectory: false
+                    );
+                }
+            }
+            return $files;
+        });
+        $retention->setGroupHandler(function (string $filepath) {
+            // group different types of backups based on tenant and date and prune them together
+            if (preg_match('/\-([0-9]{8})\.tar\.gz$/', $filepath, $matches)) {
+                // group by date str
+                return $matches[1];
+            }
+
+            return null;
+        });
+        $kept = $retention->apply('/backup/tenant');
+
+        $actualKeptFiles = [];
+        foreach ($kept as $f) {
+            $actualKeptFiles[] = $f['fileInfo']->path;
+        }
+
+        self::assertEqualsCanonicalizing($expectedKeptFiles, $actualKeptFiles);
+    }
+
+    public function testPruneByDirectory()
+    {
+        $baseDir = self::$tmpDir . '/' . __FUNCTION__;
+        if (!file_exists($baseDir)) {
+            mkdir($baseDir, 0o770, true);
+        }
+
+        $testFiles = [
+            'backup-20240129/file1.txt',
+            'backup-20240129/file2.txt',
+            'backup-20240128/file1.txt',
+            'backup-20240128/file2.txt',
+            'backup-20240127/file1.txt',
+            'backup-20240127/file2.txt',
+        ];
+        foreach ($testFiles as $filepath) {
+            $path = $baseDir . '/' . $filepath;
+            $dir = dirname($path);
+            if (!file_exists($dir)) {
+                mkdir($dir, 0o770, true);
+            }
+            file_put_contents($path, "...");
+        }
+
+        $retention = new Retention(['keep-last' => 1]);
+        $retention->setFindHandler(function (string $targetDir) {
+            $files = [];
+            foreach (scandir($targetDir) as $dir) {
+                if (in_array($dir, ['.', '..'])) {
+                    continue;
+                }
+                $filepath = "$targetDir/$dir";
+
+                if (preg_match('/backup\-([0-9]{4})([0-9]{2})([0-9]{2})/', $filepath, $matches)) {
+                    $year = intval($matches[1]);
+                    $month = intval($matches[2]);
+                    $day = intval($matches[3]);
+
+                    $date = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+                    $date = $date->setDate($year, $month, $day)->setTime(0, 0, 0, 0);
+
+                    $files[] = new FileInfo(
+                        date: $date,
+                        path: $filepath,
+                        isDirectory: true
+                    );
+                }
+            }
+            return $files;
+        });
+        $retention->apply($baseDir);
+
+        self::assertFalse(file_exists($baseDir . '/backup-20240128'));
+        self::assertFalse(file_exists($baseDir . '/backup-20240127'));
+        self::assertTrue(file_exists($baseDir . '/' . $testFiles[0]));
+        self::assertTrue(file_exists($baseDir . '/' . $testFiles[1]));
+    }
 
 }

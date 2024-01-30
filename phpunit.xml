@@ -5,13 +5,21 @@
     xsi:noNamespaceSchemaLocation="./vendor/phpunit/phpunit/phpunit.xsd"
     colors="true"
     stopOnFailure="true"
+    failOnNotice="true"
     displayDetailsOnTestsThatTriggerWarnings="true"
     displayDetailsOnTestsThatTriggerErrors="true"
     displayDetailsOnTestsThatTriggerDeprecations="true"
+    displayDetailsOnTestsThatTriggerNotices="true"
 >
     <testsuites>
         <testsuite name="Main">
             <directory>tests</directory>
         </testsuite>
     </testsuites>
+
+    <php>
+        <ini name="error_reporting" value="E_ALL" />
+        <ini name="display_errors" value="1" />
+        <ini name="display_startup_errors" value="1" />
+    </php>
 </phpunit>

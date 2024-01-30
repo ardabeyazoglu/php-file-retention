@@ -11,6 +11,7 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use SplFileInfo;
 use Throwable;
 
 class Retention implements LoggerAwareInterface
@@ -49,7 +50,7 @@ class Retention implements LoggerAwareInterface
     /**
      * @var bool dry run to test before executing
      */
-    private bool $dryRun;
+    private bool $dryRun = false;
 
     /**
      * function to execute when pruning the file
@@ -80,16 +81,16 @@ class Retention implements LoggerAwareInterface
     /**
      * @var string|null regex to exclude files (applies to full file path)
      */
-    private ?string $excludePattern;
+    private ?string $excludePattern = null;
 
     private LoggerInterface $logger;
 
     /**
      * Retention constructor.
      */
-    public function __construct(array $config = [])
+    public function __construct(array $policyConfig = [])
     {
-        $this->setConfig($config);
+        $this->setPolicyConfig($policyConfig);
         $this->logger = new NullLogger();
     }
 
@@ -109,14 +110,14 @@ class Retention implements LoggerAwareInterface
      *
      * @return self
      */
-    public function setConfig(array $config)
+    public function setPolicyConfig(array $policyConfig)
     {
-        $this->keepLast = isset($config['keep-last']) ? intval($config['keep-last']) : 0;
-        $this->keepHourly = isset($config['keep-hourly']) ? intval($config['keep-hourly']) : 0;
-        $this->keepDaily = isset($config['keep-daily']) ? intval($config['keep-daily']) : 0;
-        $this->keepWeekly = isset($config['keep-weekly']) ? intval($config['keep-weekly']) : 0;
-        $this->keepMonthly = isset($config['keep-monthly']) ? intval($config['keep-monthly']) : 0;
-        $this->keepYearly = isset($config['keep-yearly']) ? intval($config['keep-yearly']) : 0;
+        $this->keepLast = isset($policyConfig['keep-last']) ? intval($policyConfig['keep-last']) : 0;
+        $this->keepHourly = isset($policyConfig['keep-hourly']) ? intval($policyConfig['keep-hourly']) : 0;
+        $this->keepDaily = isset($policyConfig['keep-daily']) ? intval($policyConfig['keep-daily']) : 0;
+        $this->keepWeekly = isset($policyConfig['keep-weekly']) ? intval($policyConfig['keep-weekly']) : 0;
+        $this->keepMonthly = isset($policyConfig['keep-monthly']) ? intval($policyConfig['keep-monthly']) : 0;
+        $this->keepYearly = isset($policyConfig['keep-yearly']) ? intval($policyConfig['keep-yearly']) : 0;
 
         $this->keepLast = max($this->keepLast, 0);
         $this->keepHourly = max($this->keepHourly, 0);
@@ -129,9 +130,6 @@ class Retention implements LoggerAwareInterface
             // never delete all files
             $this->keepLast = 1;
         }
-
-        $this->excludePattern = isset($config['exclude-pattern']) ? (string) $config['exclude-pattern'] : null;
-        $this->dryRun = isset($config['dry-run']) && $config['dry-run'];
 
         return $this;
     }
@@ -214,7 +212,6 @@ class Retention implements LoggerAwareInterface
     {
         $keepList = [];
         $pruneList = [];
-
         $lastList = [];
         $hourlyList = [];
         $dailyList = [];
@@ -222,9 +219,33 @@ class Retention implements LoggerAwareInterface
         $monthlyList = [];
         $yearlyList = [];
 
+        if (!empty($this->groupHandler)) {
+            $fn = $this->groupHandler;
+            $fileGroups = [];
+            foreach ($files as $fileInfo) {
+                $groupName = $fn($fileInfo->path);
+                if ($groupName === "" || $groupName === null) {
+                    $groupName = "_";
+                }
+                $fileGroups[$groupName] ??= [];
+                $fileGroups[$groupName][] = $fileInfo;
+            }
+            $files = $fileGroups;
+        }
+
         // from newest to oldest
-        foreach ($files as $fileInfo) {
-            $filepath = $fileInfo->path;
+        foreach ($files as $fileInfos) {
+            $filepaths = [];
+            if (!is_array($fileInfos)) {
+                $fileInfos = [$fileInfos];
+            }
+            foreach ($fileInfos as $finfo) {
+                $filepaths[] = $finfo->path;
+            }
+
+            $fileInfo = $fileInfos[0];
+            /** @var FileInfo $fileInfo */
+
             $hour = $fileInfo->hour;
             $day = $fileInfo->day;
             $week = $fileInfo->week;
@@ -244,7 +265,7 @@ class Retention implements LoggerAwareInterface
                 $keepCount = count($lastList);
                 if ($this->keepLast > $keepCount) {
                     $keep = true;
-                    $lastList[] = $filepath;
+                    $lastList[] = $filepaths;
                     $reasons[] = 'last';
                 }
             }
@@ -303,52 +324,61 @@ class Retention implements LoggerAwareInterface
 
             if ($this->keepHourly) {
                 if (!isset($hourlyList[$hourIndex])) {
-                    $hourlyList[$hourIndex] = $filepath;
+                    $hourlyList[$hourIndex] = $filepaths;
                 }
             }
 
             if ($this->keepDaily) {
                 if (!isset($dailyList[$dayIndex])) {
-                    $dailyList[$dayIndex] = $filepath;
+                    $dailyList[$dayIndex] = $filepaths;
                 }
             }
 
             if ($this->keepWeekly) {
                 if (!isset($weeklyList[$weekIndex])) {
-                    $weeklyList[$weekIndex] = $filepath;
+                    $weeklyList[$weekIndex] = $filepaths;
                 }
             }
 
             if ($this->keepMonthly) {
                 if (!isset($monthlyList[$monthIndex])) {
-                    $monthlyList[$monthIndex] = $filepath;
+                    $monthlyList[$monthIndex] = $filepaths;
                 }
             }
 
             if ($this->keepYearly) {
                 if (!isset($yearlyList[$yearIndex])) {
-                    $yearlyList[$yearIndex] = $filepath;
+                    $yearlyList[$yearIndex] = $filepaths;
                 }
             }
 
             if ($keep) {
-                $keepList[] = [
-                    'fileInfo' => $fileInfo,
-                    'reasons' => $reasons,
-                ];
+                foreach ($fileInfos as $finfo) {
+                    $keepList[] = [
+                        'fileInfo' => $finfo,
+                        'reasons' => $reasons,
+                    ];
+                }
             }
             else {
-                $pruneList[] = $fileInfo;
+                foreach ($fileInfos as $finfo) {
+                    $pruneList[] = $finfo;
+                }
             }
         }
 
         if (empty($keepList)) {
             // always keep at least 1
             if (count($files) > 0) {
-                $keepList[] = [
-                    'fileInfo' => $files[0],
-                    'reasons' => ['last']
-                ];
+                if (!is_array($files[0])) {
+                    $files[0] = [$files[0]];
+                }
+                foreach ($files[0] as $finfo) {
+                    $keepList[] = [
+                        'fileInfo' => $finfo,
+                        'reasons' => ['last']
+                    ];
+                }
             }
         }
 
@@ -397,37 +427,25 @@ class Retention implements LoggerAwareInterface
                     }
                 }
 
-                $found = false;
-
-                // trailing slash for cloud storage
+                // trailing slash is for cloud storage folders
                 if (str_ends_with($filepath, '/') || is_dir($filepath)) {
                     $isDirectory = true;
-
-                    if (!$found) {
-                        $filesRecursive = $this->findFiles($filepath);
-                        if (!empty($filesRecursive)) {
-                            $files = array_merge($files, $filesRecursive);
-                        }
-                    }
                 }
                 else {
                     $isDirectory = false;
-                    $found = true;
                 }
 
-                if ($found) {
-                    $fileInfo = $this->checkTime($filepath, $isDirectory);
-                    if (is_null($fileInfo)) {
-                        continue;
-                    }
-                    $files[] = $fileInfo;
+                $fileInfo = $this->checkTime($filepath, $isDirectory);
+                if (is_null($fileInfo)) {
+                    continue;
                 }
+                $files[] = $fileInfo;
             }
         }
 
         // sort files by descending order (from newest to oldest)
         usort($files, function (FileInfo $a, FileInfo $b) {
-            return $b->timestamp - $a->timestamp ? -1 : 1;
+            return $b->timestamp > $a->timestamp ? 1 : -1;
         });
 
         return $files;
@@ -471,34 +489,48 @@ class Retention implements LoggerAwareInterface
     protected function pruneFile(FileInfo $fileInfo)
     {
         if (is_callable($this->pruneHandler)) {
-            $fn = $this->pruneHandler;
-            $rs = $fn($fileInfo);
+            try {
+                $fn = $this->pruneHandler;
+                $rs = $fn($fileInfo);
+            }
+            catch (Throwable $ex) {
+                if (!($ex instanceof RetentionException)) {
+                    throw new RetentionException($ex->getMessage());
+                }
+                throw $ex;
+            }
         }
         else {
             try {
                 $pathToDelete = $fileInfo->path;
-                if ($fileInfo->isDirectory) {
-                    $scheme = "file";
-                    if (preg_match('/^([0-9a-zA-Z_]+):\/\//i', strtolower($pathToDelete), $matches)) {
-                        $scheme = $matches[1];
-                    }
 
-                    if ($scheme === 'file') {
-                        // basic safeguard against deleting unix root/system folders
-                        // most of the time backup dir will be at least /path/to/foo
-                        $realPathToDelete = realpath($pathToDelete);
-                        if (substr_count($realPathToDelete, '/') < 3) {
-                            // skip if scheme is different (e.g. s3://)
-                            if (str_starts_with($realPathToDelete, '/')) {
-                                throw new RetentionException("Pruning is not allowed in '{$pathToDelete}', because it is marked as risky. The directory depth must be bigger than 2.");
-                            }
+                $scheme = "file";
+                if (preg_match('/^([0-9a-zA-Z_]+):\/\//i', strtolower($pathToDelete), $matches)) {
+                    $scheme = $matches[1];
+                }
+
+                if ($scheme === 'file') {
+                    // a very basic safeguard against deleting unix root/system folders by mistake
+                    // most of the time backup dir will be at least /path/to/foo
+                    $realPathToDelete = realpath($pathToDelete);
+                    if (substr_count($realPathToDelete, '/') < 3) {
+                        // skip if scheme is different (e.g. s3://)
+                        if (str_starts_with($realPathToDelete, '/')) {
+                            throw new RetentionException("Pruning is not allowed in '{$pathToDelete}', because it is marked as risky. The directory depth must be bigger than 2.");
                         }
                     }
+                }
 
+                if ($fileInfo->isDirectory) {
                     $directory = new RecursiveDirectoryIterator($pathToDelete);
                     $iterator = new RecursiveIteratorIterator($directory);
                     $dirsToDelete = [];
                     foreach ($iterator as $info) {
+                        /** @var SplFileInfo $info */
+                        if (in_array($info->getFilename(), ['.', '..'])) {
+                            continue;
+                        }
+
                         $pathToDelete = $info->getPathName();
                         if (!$info->isDir()) {
                             unlink($pathToDelete);
@@ -536,7 +568,7 @@ class Retention implements LoggerAwareInterface
     }
 
     /**
-     * change default time calculation
+     * change default time detection (only used with default finder)
      * @param callable $callback
      */
     public function setTimeHandler(callable $callback)
