@@ -1,4 +1,5 @@
-name: GitHub Actions
+name: continuous integration
+run-name: continuous integration actions
 on: [push]
 jobs:
   CodeCoverage:
