@@ -1,15 +1,28 @@
-name: continuous integration
+name: CI
 run-name: continuous integration actions
 on: [push]
 jobs:
   CodeCoverage:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
-      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
-      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Install composer and dependencies
+        uses: php-actions/composer@v6
+
+      - name: PHPUnit Tests
+        uses: php-actions/phpunit@v3
+        env:
+          XDEBUG_MODE: coverage
+        with:
+          bootstrap: vendor/autoload.php
+          configuration: phpunit.xml
+          php_version: 8.3
+          php_extensions: xdebug
+          args: tests --coverage-clover ./coverage.xml
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      - run: echo "🍏 This job's status is ${{ job.status }}."

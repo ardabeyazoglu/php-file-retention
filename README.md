@@ -1,5 +1,7 @@
 # php-retention
 
+[![codecov](https://codecov.io/gh/ardabeyazoglu/php-retention/graph/badge.svg?token=5TE2OKaIPT)](https://codecov.io/gh/ardabeyazoglu/php-retention)
+
 A simple but handy php library to apply retention policy to files before deleting, archiving or anything that is possible with a custom callback. 
 A typical example would be backup archiving based on custom policies such as "keep last 7 daily, 2 weekly and 3 monthly backups".
 
