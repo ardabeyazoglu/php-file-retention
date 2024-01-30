@@ -1,5 +1,6 @@
 # php-retention
 
+![build](https://github.com/ardabeyazoglu/php-retention/actions/workflows/main.yml/badge.svg)
 [![codecov](https://codecov.io/gh/ardabeyazoglu/php-retention/graph/badge.svg?token=5TE2OKaIPT)](https://codecov.io/gh/ardabeyazoglu/php-retention)
 
 A simple but handy php library to apply retention policy to files before deleting, archiving or anything that is possible with a custom callback. 
@@ -170,6 +171,4 @@ Please be descriptive in your posts.
     
 # ToDo
 
-- [ ] Complete example tests
-- [ ] Release first version through packagist and codecov
 - [ ] Add keep-within-*** policy support

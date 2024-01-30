@@ -2,7 +2,7 @@ name: CI
 run-name: continuous integration actions
 on: [push]
 jobs:
-  CodeCoverage:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
