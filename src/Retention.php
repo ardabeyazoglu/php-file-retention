@@ -180,11 +180,10 @@ class Retention implements LoggerAwareInterface
         }
 
         if (empty($keepList)) {
-            $this->logger->error('There must be at least one file to keep.', [
+            $this->logger->notice('There must be at least one file to keep.', [
                 'baseDir' => $baseDir,
             ]);
-
-            throw new RetentionException('There must be at least one file to keep.');
+            return $keepList;
         }
 
         if ($this->dryRun) {
