@@ -18,7 +18,7 @@ A typical example would be backup archiving based on custom policies such as "ke
 
 # Install
 
-    composer require ardabeyazoglu:php-retention
+    composer require ardabeyazoglu/php-retention
 
 # Test
 
