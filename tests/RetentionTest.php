@@ -142,7 +142,8 @@ class RetentionTest extends TestCase
 
         /** @var Retention $retention */
         $retention->setPolicyConfig($policy);
-        $actualKeepList = $retention->apply('');
+        $result = $retention->apply('');
+        $actualKeepList = $result->keepList;
 
         self::assertSameSize($expectedKeepList, $actualKeepList);
 
@@ -266,12 +267,6 @@ class RetentionTest extends TestCase
 
     public function testGrouping()
     {
-        $testFiles = [
-            '/backup/tenant/mysql-20240106.tar.gz',
-            '/backup/tenant/files-20240106.tar.gz',
-            '/backup/tenant/mysql-20240107.tar.gz',
-            '/backup/tenant/files-20240107.tar.gz'
-        ];
         $expectedKeptFiles = [
             '/backup/tenant/mysql-20240107.tar.gz',
             '/backup/tenant/files-20240107.tar.gz'
@@ -279,12 +274,18 @@ class RetentionTest extends TestCase
 
         $retention = new Retention();
         $retention->setPolicyConfig(['keep-last' => 1]);
-        $retention->setPruneHandler(function (FileInfo $fileInfo) {
+        $retention->setPruneHandler(function () {
             // simulate pruning
             return true;
         });
-        $retention->setFindHandler(function (string $targetDir) use ($testFiles) {
+        $retention->setFindHandler(function () {
             $files = [];
+            $testFiles = [
+                '/backup/tenant/mysql-20240106.tar.gz',
+                '/backup/tenant/files-20240106.tar.gz',
+                '/backup/tenant/mysql-20240107.tar.gz',
+                '/backup/tenant/files-20240107.tar.gz'
+            ];
             foreach ($testFiles as $filepath) {
                 if (preg_match('/\-([0-9]{4})([0-9]{2})([0-9]{2})/', $filepath, $matches)) {
                     $year = intval($matches[1]);
@@ -312,7 +313,8 @@ class RetentionTest extends TestCase
 
             return null;
         });
-        $kept = $retention->apply('/backup/tenant');
+        $result = $retention->apply('/backup/tenant');
+        $kept = $result->keepList;
 
         $actualKeptFiles = [];
         foreach ($kept as $f) {

@@ -161,8 +161,10 @@ class Retention implements LoggerAwareInterface
      * @param string $baseDir
      * @return array
      */
-    public function apply(string $baseDir)
+    public function apply(string $baseDir): Result
     {
+        $startTime = time();
+
         $files = $this->findFiles($baseDir);
         $result = $this->checkPolicy($files);
         $keepList = $result['keep'];
@@ -198,7 +200,14 @@ class Retention implements LoggerAwareInterface
             }
         }
 
-        return $keepList;
+        $endTime = time();
+
+        return new Result(
+            keepList: $keepList,
+            pruneList: $pruneList,
+            startTime: $startTime,
+            endTime: $endTime
+        );
     }
 
     /**
