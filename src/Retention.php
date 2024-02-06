@@ -185,17 +185,17 @@ class Retention implements LoggerAwareInterface
             $this->logger->notice('There must be at least one file to keep.', [
                 'baseDir' => $baseDir,
             ]);
-            return $keepList;
-        }
-
-        if ($this->dryRun) {
-            $this->logger->debug('No policy applied because of dry-run.');
         }
         else {
-            foreach ($pruneList as $fileInfo) {
-                /** @var FileInfo $fileInfo */
-                if (!$this->pruneFile($fileInfo)) {
-                    throw new RetentionException("Pruning {$fileInfo->path} failed unexpectedly.");
+            if ($this->dryRun) {
+                $this->logger->debug('No policy applied because of dry-run.');
+            }
+            else {
+                foreach ($pruneList as $fileInfo) {
+                    /** @var FileInfo $fileInfo */
+                    if (!$this->pruneFile($fileInfo)) {
+                        throw new RetentionException("Pruning {$fileInfo->path} failed unexpectedly.");
+                    }
                 }
             }
         }
