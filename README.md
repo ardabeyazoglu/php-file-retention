@@ -11,7 +11,7 @@ A typical example would be backup archiving based on custom policies such as "ke
 - Apply hourly, daily, weekly, monthly and yearly policies
 - Customize prune action to do something else instead of deleting (e.g. move them to cloud)
 - Customize file finder logic (e.g. support different storage interfaces such as S3)
-- Grouping files (e.g. to delete parent directory instead of a single file)
+- Grouping files (e.g. prune multiple files together instead of a single file)
 - Dry runnable
 - Logger aware
 - No dependencies
